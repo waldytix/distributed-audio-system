@@ -14,9 +14,9 @@ Distributed Audio System is a professional C++ project that will evolve into a d
 
 ## Current Status
 
-**Phase 5: Jitter Buffer, Clock Estimation, and Playback Scheduling**
+**Phase 6: Multi-Device Playback Synchronization**
 
-Phase 1 established the project structure and build system. Phase 2 added the foundational in-memory audio data model and producer/consumer buffer. Phase 3 added laptop-based PCM conversion and a small DSP layer. Phase 4 added localhost UDP transport for validated PCM16 `AudioFrame` packets. Phase 5 adds receiver-side jitter buffering, deterministic packet impairment simulation, monotonic clock estimation, and simulated playback scheduling. Physical playback and production-grade distributed synchronization remain deferred.
+Phase 1 established the project structure and build system. Phase 2 added the foundational in-memory audio data model and producer/consumer buffer. Phase 3 added laptop-based PCM conversion and a small DSP layer. Phase 4 added localhost UDP transport for validated PCM16 `AudioFrame` packets. Phase 5 added receiver-side jitter buffering, deterministic packet impairment simulation, monotonic clock estimation, and simulated playback scheduling. Phase 6 adds three independent simulated playback endpoints and bounded synchronization control. Physical playback and production-grade distributed synchronization remain deferred.
 
 ## Phase 2 Architecture
 
@@ -68,9 +68,21 @@ The demo also sends ten real 5 ms stereo PCM16 frames over `127.0.0.1` and repor
 
 The demo retains the real UDP loopback exchange and adds a separate deterministic timing scenario with reordering, duplication, and one lost frame. See [docs/synchronization.md](docs/synchronization.md) for the receiver timing model and its limitations.
 
+## Phase 6 Multi-Device Synchronization
+
+- Three reusable independent playback endpoints
+- Reference timeline separated from endpoint clock models
+- Per-endpoint initial offset and configured drift
+- Bounded proportional synchronization corrections
+- Configurable tolerance, correction limit, convergence rate, and update interval
+- Per-endpoint synchronization metrics and inter-device skew measurement
+- Shared deterministic stream with endpoint-specific impairment conditions
+
+The demo reports measured initial/final skew, endpoint errors, corrections, states, drift, and concealment. It demonstrates gradual convergence in simulation; it does not claim sample-accurate synchronization or production-grade distributed clock discipline.
+
 ## Testing
 
-The project uses small internal test executables built from standard C++17 facilities. CTest covers Phase 2 buffer behavior, Phase 3 DSP behavior, Phase 4 packet/UDP behavior, and Phase 5 jitter, clock, scheduler, impairment, concealment, and simulated playback behavior.
+The project uses small internal test executables built from standard C++17 facilities. CTest covers Phase 2 buffer behavior, Phase 3 DSP behavior, Phase 4 packet/UDP behavior, Phase 5 jitter, clock, scheduler, impairment, concealment, and simulated playback behavior, and Phase 6 multi-endpoint convergence and bounded corrections.
 
 ## Build and Run
 

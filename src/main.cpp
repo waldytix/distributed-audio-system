@@ -4,6 +4,7 @@
 #include "distributed_audio/dsp_pipeline.hpp"
 #include "distributed_audio/jitter_buffer.hpp"
 #include "distributed_audio/network_impairment.hpp"
+#include "distributed_audio/multi_device_sync.hpp"
 #include "distributed_audio/playback_scheduler.hpp"
 #include "distributed_audio/pcm_conversion.hpp"
 #include "distributed_audio/simulated_playback.hpp"
@@ -16,6 +17,7 @@
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
+#include <numeric>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -23,6 +25,7 @@
 namespace {
 
 constexpr float kPi = 3.14159265358979323846F;
+using distributed_audio::timing::ClockTimePoint;
 using namespace std::chrono_literals;
 
 }  // namespace
@@ -195,6 +198,81 @@ int main() {
               << "Clock drift: " << clock_estimator.estimate().drift_ppm << " ppm\n"
               << "First frame scheduled: " << (scheduled.has_value() ? "yes" : "not ready")
               << '\n';
+
+    distributed_audio::timing::EndpointConfig reference_config{"reference", 0ms, 0.0, {}};
+    distributed_audio::timing::EndpointConfig fast_config{"fast-clock", 8ms, 120.0, {}};
+    distributed_audio::timing::EndpointConfig slow_config{"slow-clock", -7ms, -100.0, {}};
+    std::vector<distributed_audio::AudioFrame> synchronization_frames;
+    constexpr std::size_t synchronization_frame_count = 300;
+    synchronization_frames.reserve(synchronization_frame_count);
+    for (std::uint64_t sequence = 1; sequence <= synchronization_frame_count; ++sequence) {
+        distributed_audio::NormalizedSamples sync_samples(
+            timing_samples_per_channel * format.channel_count, 0.0F);
+        synchronization_frames.emplace_back(
+            format, sequence,
+            distributed_audio::AudioFrame::Timestamp{
+                static_cast<std::int64_t>(sequence - 1) * 5'000'000},
+            distributed_audio::float_to_pcm16(sync_samples, format));
+    }
+    std::vector<std::chrono::milliseconds> synchronization_delays;
+    synchronization_delays.reserve(synchronization_frame_count);
+    for (std::size_t index = 0; index < synchronization_frame_count; ++index) {
+        synchronization_delays.push_back(static_cast<int>(index * 5) * 1ms);
+    }
+    reference_config.impairment.arrival_delays = synchronization_delays;
+    fast_config.impairment.arrival_delays = synchronization_delays;
+    slow_config.impairment.arrival_delays = synchronization_delays;
+    slow_config.impairment.arrival_order.resize(synchronization_frame_count);
+    std::iota(slow_config.impairment.arrival_order.begin(),
+              slow_config.impairment.arrival_order.end(), std::uint64_t{1});
+    slow_config.impairment.duplicate_sequences = {3};
+    slow_config.impairment.lost_sequences = {20, 55};
+    slow_config.impairment.arrival_delays = {0ms, 3ms, 1ms};
+    distributed_audio::timing::PlaybackEndpoint reference_endpoint{
+        reference_config, 16, 2, 1ms};
+    distributed_audio::timing::PlaybackEndpoint fast_endpoint{fast_config, 16, 2, 1ms};
+    distributed_audio::timing::PlaybackEndpoint slow_endpoint{slow_config, 16, 2, 1ms};
+    reference_endpoint.load(synchronization_frames);
+    fast_endpoint.load(synchronization_frames);
+    slow_endpoint.load(synchronization_frames);
+    std::vector<distributed_audio::timing::PlaybackEndpoint*> endpoints{
+        &reference_endpoint, &fast_endpoint, &slow_endpoint};
+    distributed_audio::timing::SynchronizationParameters sync_parameters;
+    sync_parameters.tolerance = 500us;
+    sync_parameters.maximum_correction = 1ms;
+    sync_parameters.convergence_rate = 0.2;
+    sync_parameters.update_interval = 20ms;
+    distributed_audio::timing::SynchronizationController sync_controller{sync_parameters};
+    const auto initial_skew = sync_controller.maximum_skew(endpoints, ClockTimePoint{});
+    constexpr auto simulation_step = 5ms;
+    constexpr int simulation_steps = 320;
+    for (int step = 0; step < simulation_steps; ++step) {
+        const auto now = ClockTimePoint{step * simulation_step};
+        for (auto* endpoint : endpoints) {
+            endpoint->advance(now);
+        }
+        if (step % 4 == 0) {
+            sync_controller.update(endpoints, now);
+        }
+    }
+    const auto final_time = ClockTimePoint{1500ms};
+    const auto final_skew = sync_controller.maximum_skew(endpoints, final_time);
+    std::cout << "\nMulti-device synchronization demo\n"
+              << "Tolerance: " << sync_parameters.tolerance.count() / 1'000'000.0 << " ms\n"
+              << "Maximum correction/update: "
+              << sync_parameters.maximum_correction.count() / 1'000'000.0 << " ms\n"
+              << "Initial inter-device skew: " << initial_skew.count() / 1'000'000.0 << " ms\n"
+              << "Final inter-device skew: " << final_skew.count() / 1'000'000.0 << " ms\n";
+    for (const auto* endpoint : endpoints) {
+        const auto& metrics = endpoint->metrics();
+        std::cout << endpoint->name() << ": initial offset "
+                  << metrics.initial_offset.count() / 1'000'000.0 << " ms, drift "
+                  << metrics.configured_drift_ppm << " ppm, final error "
+                  << metrics.current_error.count() / 1'000'000.0 << " ms, correction "
+                  << metrics.applied_correction.count() / 1'000'000.0 << " ms, state "
+                  << static_cast<int>(metrics.state) << ", concealed "
+                  << metrics.concealed_frames << '\n';
+    }
 
     return 0;
 }
