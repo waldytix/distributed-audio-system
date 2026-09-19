@@ -4,6 +4,7 @@
 #include "distributed_audio/dsp_pipeline.hpp"
 #include "distributed_audio/device_discovery.hpp"
 #include "distributed_audio/audio_session.hpp"
+#include "distributed_audio/audio_io.hpp"
 #include "distributed_audio/audio_stream.hpp"
 #include "distributed_audio/jitter_buffer.hpp"
 #include "distributed_audio/network_impairment.hpp"
@@ -17,11 +18,13 @@
 
 #include <cmath>
 #include <chrono>
+#include <algorithm>
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
 #include <numeric>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -33,7 +36,54 @@ using namespace std::chrono_literals;
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
+    bool synthetic_mode = false;
+    bool list_devices = false;
+    std::string input_device;
+    std::string output_device;
+    for (int index = 1; index < argc; ++index) {
+        const std::string argument{argv[index]};
+        if (argument == "--synthetic") {
+            synthetic_mode = true;
+        } else if (argument == "--list-devices") {
+            list_devices = true;
+        } else if ((argument == "--input-device" || argument == "--output-device") && index + 1 < argc) {
+            (argument == "--input-device" ? input_device : output_device) = argv[++index];
+        } else {
+            std::cerr << "Usage: distributed_audio_system [--synthetic] [--list-devices] "
+                         "[--input-device <id>] [--output-device <id>]\n";
+            return 2;
+        }
+    }
+    auto audio_backend = distributed_audio::audio_io::create_default_backend();
+    const auto backend_result = audio_backend->initialize();
+    if (!backend_result) {
+        std::cerr << backend_result.message << '\n';
+        return 1;
+    }
+    if (list_devices) {
+        for (const auto& device : audio_backend->enumerate()) {
+            std::cout << device.id << ": " << device.name
+                      << " (input " << device.input_channels
+                      << ", output " << device.output_channels << ")\n";
+        }
+        audio_backend->shutdown();
+        return 0;
+    }
+    if (!input_device.empty() || !output_device.empty()) {
+        const auto devices = audio_backend->enumerate();
+        const auto exists = [&devices](const std::string& id) {
+            return std::any_of(devices.begin(), devices.end(),
+                               [&id](const auto& device) { return device.id == id; });
+        };
+        if ((!input_device.empty() && !exists(input_device)) ||
+            (!output_device.empty() && !exists(output_device))) {
+            std::cerr << "Requested audio device was not found.\n";
+            audio_backend->shutdown();
+            return 1;
+        }
+        std::cout << "Audio backend mode: " << (synthetic_mode ? "synthetic" : "mock") << '\n';
+    }
     std::cout << "Distributed Audio System\n"
               << "Version 0.1.0\n"
               << "System initialized successfully.\n";
@@ -483,6 +533,7 @@ int main() {
                       ? "incompatible audio configuration" : "not rejected") << '\n';
     control_initiator.shutdown();
     control_receiver.shutdown();
+    audio_backend->shutdown();
 
     return 0;
 }

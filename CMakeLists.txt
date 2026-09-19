@@ -8,6 +8,14 @@ project(DistributedAudioSystem
 
 find_package(Threads REQUIRED)
 
+find_path(PORTAUDIO_INCLUDE_DIR portaudio.h)
+find_library(PORTAUDIO_LIBRARY NAMES portaudio portaudio-2)
+if (PORTAUDIO_INCLUDE_DIR AND PORTAUDIO_LIBRARY)
+    set(DISTRIBUTED_AUDIO_HAS_PORTAUDIO 1)
+else()
+    set(DISTRIBUTED_AUDIO_HAS_PORTAUDIO 0)
+endif()
+
 function(enable_project_warnings target_name)
     target_compile_options(${target_name} PRIVATE
         -Wall
@@ -42,6 +50,8 @@ add_library(distributed_audio_core
     src/device_discovery.cpp
     src/audio_session.cpp
     src/audio_stream.cpp
+    src/audio_io.cpp
+    src/portaudio_backend.cpp
 )
 
 target_compile_features(distributed_audio_core PUBLIC cxx_std_17)
@@ -49,6 +59,13 @@ target_include_directories(distributed_audio_core PUBLIC
     ${PROJECT_SOURCE_DIR}/include
 )
 target_link_libraries(distributed_audio_core PUBLIC Threads::Threads)
+target_compile_definitions(distributed_audio_core PUBLIC
+    DISTRIBUTED_AUDIO_HAS_PORTAUDIO=${DISTRIBUTED_AUDIO_HAS_PORTAUDIO}
+)
+if (DISTRIBUTED_AUDIO_HAS_PORTAUDIO)
+    target_include_directories(distributed_audio_core PRIVATE ${PORTAUDIO_INCLUDE_DIR})
+    target_link_libraries(distributed_audio_core PRIVATE ${PORTAUDIO_LIBRARY})
+endif()
 enable_project_warnings(distributed_audio_core)
 
 add_executable(distributed_audio_system
@@ -122,3 +139,11 @@ target_link_libraries(distributed_audio_stream_tests PRIVATE distributed_audio_c
 enable_project_warnings(distributed_audio_stream_tests)
 
 add_test(NAME distributed_audio_stream_tests COMMAND distributed_audio_stream_tests)
+
+add_executable(distributed_audio_audio_io_tests
+    tests/audio_io_tests.cpp
+)
+target_link_libraries(distributed_audio_audio_io_tests PRIVATE distributed_audio_core)
+enable_project_warnings(distributed_audio_audio_io_tests)
+
+add_test(NAME distributed_audio_audio_io_tests COMMAND distributed_audio_audio_io_tests)
