@@ -6,6 +6,7 @@
 #include "distributed_audio/audio_session.hpp"
 #include "distributed_audio/audio_io.hpp"
 #include "distributed_audio/audio_stream.hpp"
+#include "distributed_audio/network_resilience.hpp"
 #include "distributed_audio/jitter_buffer.hpp"
 #include "distributed_audio/network_impairment.hpp"
 #include "distributed_audio/multi_device_sync.hpp"
@@ -39,6 +40,7 @@ using namespace std::chrono_literals;
 int main(int argc, char** argv) {
     bool synthetic_mode = false;
     bool list_devices = false;
+    bool resilience_demo = false;
     std::string input_device;
     std::string output_device;
     for (int index = 1; index < argc; ++index) {
@@ -47,11 +49,13 @@ int main(int argc, char** argv) {
             synthetic_mode = true;
         } else if (argument == "--list-devices") {
             list_devices = true;
+        } else if (argument == "--resilience-demo") {
+            resilience_demo = true;
         } else if ((argument == "--input-device" || argument == "--output-device") && index + 1 < argc) {
             (argument == "--input-device" ? input_device : output_device) = argv[++index];
         } else {
             std::cerr << "Usage: distributed_audio_system [--synthetic] [--list-devices] "
-                         "[--input-device <id>] [--output-device <id>]\n";
+                         "[--resilience-demo] [--input-device <id>] [--output-device <id>]\n";
             return 2;
         }
     }
@@ -531,6 +535,37 @@ int main(int argc, char** argv) {
               << (rejection.has_value() && rejection->reason ==
                           distributed_audio::session::SessionRejectReason::incompatible_format
                       ? "incompatible audio configuration" : "not rejected") << '\n';
+
+    if (resilience_demo) {
+        std::vector<distributed_audio::AudioFrame> resilience_frames;
+        for (std::uint64_t sequence = 0; sequence < 120; ++sequence) {
+            resilience_frames.emplace_back(
+                format, sequence,
+                distributed_audio::AudioFrame::Timestamp{
+                    static_cast<std::int64_t>(sequence) * 5'000'000},
+                distributed_audio::AudioFrame::Payload(960,
+                    static_cast<std::uint8_t>(sequence)));
+        }
+        distributed_audio::timing::ImpairmentPlan resilience_plan;
+        for (std::uint64_t sequence = 0; sequence < resilience_frames.size(); ++sequence) {
+            if (sequence < 40 || sequence >= 45) resilience_plan.arrival_order.push_back(sequence);
+        }
+        resilience_plan.lost_sequences = {10, 11, 12, 13, 14, 60};
+        resilience_plan.duplicate_sequences = {20, 20};
+        resilience_plan.arrival_delays.assign(resilience_plan.arrival_order.size(), 1ms);
+        const auto resilience = distributed_audio::resilience::run_deterministic_resilience(
+            resilience_frames, resilience_plan,
+            distributed_audio::resilience::AdaptiveJitterConfig{},
+            distributed_audio::resilience::RecoveryConfig{});
+        std::cout << "\nNetwork resilience demo\n"
+                  << "Playback frames: " << resilience.playback_sequence.size() << '\n'
+                  << "Packets received: " << resilience.statistics.packets_received << '\n'
+                  << "Missing packets: " << resilience.statistics.missing_packets << '\n'
+                  << "Concealed frames: " << resilience.statistics.concealed_frames << '\n'
+                  << "Loss estimate: " << resilience.statistics.loss_percent() << "%\n"
+                  << "Final jitter-buffer depth: " << resilience.final_buffer_depth << '\n'
+                  << "Recovered streaming: " << (resilience.recovered ? "yes" : "no") << '\n';
+    }
     control_initiator.shutdown();
     control_receiver.shutdown();
     audio_backend->shutdown();

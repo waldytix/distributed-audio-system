@@ -14,9 +14,9 @@ Distributed Audio System is a professional C++ project that will evolve into a d
 
 ## Current Status
 
-**Phase 10: Audio I/O Abstraction**
+**Phase 11: Network Reliability, Resilience, and Adaptive Streaming**
 
-Phase 1 established the project structure and build system. Phase 2 added the foundational in-memory audio data model and producer/consumer buffer. Phase 3 added laptop-based PCM conversion and a small DSP layer. Phase 4 added localhost UDP transport for validated PCM16 `AudioFrame` packets. Phase 5 added receiver-side jitter buffering, deterministic packet impairment simulation, monotonic clock estimation, and simulated playback scheduling. Phase 6 added three independent simulated playback endpoints and bounded synchronization control. Phase 7 added explicit device discovery, a thread-safe node registry, liveness tracking, capability compatibility, and real localhost discovery traffic. Phase 8 added control-plane audio-session negotiation and lifecycle management. Phase 9 connects a negotiated session to a genuine localhost PCM media stream and simulated playback pipeline. Phase 10 adds backend-neutral audio device interfaces, deterministic mock capture/output, bounded callback handoff buffers, and optional PortAudio detection. Physical playback, authentication, encryption, and production-grade distributed synchronization remain future work.
+Phase 1 established the project structure and build system. Phase 2 added the foundational in-memory audio data model and producer/consumer buffer. Phase 3 added laptop-based PCM conversion and a small DSP layer. Phase 4 added localhost UDP transport for validated PCM16 `AudioFrame` packets. Phase 5 added receiver-side jitter buffering, deterministic packet impairment simulation, monotonic clock estimation, and simulated playback scheduling. Phase 6 added three independent simulated playback endpoints and bounded synchronization control. Phase 7 added explicit device discovery, a thread-safe node registry, liveness tracking, capability compatibility, and real localhost discovery traffic. Phase 8 added control-plane audio-session negotiation and lifecycle management. Phase 9 connects a negotiated session to a genuine localhost PCM media stream and simulated playback pipeline. Phase 10 adds backend-neutral audio device interfaces, deterministic mock capture/output, bounded callback handoff buffers, and optional PortAudio detection. Phase 11 adds snapshot statistics, bounded adaptive jitter policy, deterministic loss/jitter simulation, liveness monitoring, and bounded recovery state. Physical playback, authentication, encryption, and production-grade distributed synchronization remain future work.
 
 ## Phase 2 Architecture
 
@@ -127,9 +127,11 @@ The demo sends real session-associated PCM16 frames from the negotiated sender t
 
 Use `./build/distributed_audio_system --list-devices` to enumerate the active backend's devices, or `--synthetic` for the deterministic streaming path. PortAudio was not available in the current WSL environment, so no physical capture or playback is claimed.
 
+Use `./build/distributed_audio_system --resilience-demo` to run the deterministic loss, burst-loss, duplicate, reorder, concealment, and bounded-buffer scenario.
+
 ## Testing
 
-The project uses small internal test executables built from standard C++17 facilities. CTest covers Phase 2 buffer behavior, Phase 3 DSP behavior, Phase 4 packet/UDP behavior, Phase 5 jitter, clock, scheduler, impairment, concealment, and simulated playback behavior, Phase 6 multi-endpoint convergence, Phase 7 discovery, registry, liveness, compatibility, and localhost service behavior, Phase 8 control serialization, negotiation, lifecycle, rejection, timeout, multiple sessions, and localhost exchange, Phase 9 media streaming, and Phase 10 mock audio I/O.
+The project uses small internal test executables built from standard C++17 facilities. CTest covers Phase 2 buffer behavior, Phase 3 DSP behavior, Phase 4 packet/UDP behavior, Phase 5 jitter, clock, scheduler, impairment, concealment, and simulated playback behavior, Phase 6 multi-endpoint convergence, Phase 7 discovery, registry, liveness, compatibility, and localhost service behavior, Phase 8 control serialization, negotiation, lifecycle, rejection, timeout, multiple sessions, and localhost exchange, Phase 9 media streaming, Phase 10 mock audio I/O, and Phase 11 resilience accounting, adaptive limits, liveness recovery, loss, and stress behavior.
 
 ## Build and Run
 

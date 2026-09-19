@@ -52,6 +52,7 @@ add_library(distributed_audio_core
     src/audio_stream.cpp
     src/audio_io.cpp
     src/portaudio_backend.cpp
+    src/network_resilience.cpp
 )
 
 target_compile_features(distributed_audio_core PUBLIC cxx_std_17)
@@ -147,3 +148,11 @@ target_link_libraries(distributed_audio_audio_io_tests PRIVATE distributed_audio
 enable_project_warnings(distributed_audio_audio_io_tests)
 
 add_test(NAME distributed_audio_audio_io_tests COMMAND distributed_audio_audio_io_tests)
+
+add_executable(distributed_audio_resilience_tests
+    tests/network_resilience_tests.cpp
+)
+target_link_libraries(distributed_audio_resilience_tests PRIVATE distributed_audio_core)
+enable_project_warnings(distributed_audio_resilience_tests)
+
+add_test(NAME distributed_audio_resilience_tests COMMAND distributed_audio_resilience_tests)
