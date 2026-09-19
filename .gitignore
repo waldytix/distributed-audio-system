@@ -1,0 +1,35 @@
+# Build directories
+build/
+build-*/
+cmake-build-*/
+
+# Compiled binaries and object files
+*.a
+*.dll
+*.dylib
+*.exe
+*.o
+*.obj
+*.so
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+CTestTestfile.cmake
+Makefile
+cmake_install.cmake
+install_manifest.txt
+_compile_commands.json
+compile_commands.json
+
+# VS Code local configuration
+.vscode/*
+!.vscode/.gitignore
+
+# Temporary and editor files
+*.bak
+*.log
+*.swp
+*.swo
+*~
+.DS_Store
