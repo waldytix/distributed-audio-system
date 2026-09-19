@@ -6,6 +6,9 @@ project(DistributedAudioSystem
     LANGUAGES CXX
 )
 
+option(DISTRIBUTED_AUDIO_ENABLE_ASAN "Enable AddressSanitizer" OFF)
+option(DISTRIBUTED_AUDIO_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+
 find_package(Threads REQUIRED)
 
 find_path(PORTAUDIO_INCLUDE_DIR portaudio.h)
@@ -53,6 +56,7 @@ add_library(distributed_audio_core
     src/audio_io.cpp
     src/portaudio_backend.cpp
     src/network_resilience.cpp
+    src/benchmark.cpp
 )
 
 target_compile_features(distributed_audio_core PUBLIC cxx_std_17)
@@ -68,6 +72,14 @@ if (DISTRIBUTED_AUDIO_HAS_PORTAUDIO)
     target_link_libraries(distributed_audio_core PRIVATE ${PORTAUDIO_LIBRARY})
 endif()
 enable_project_warnings(distributed_audio_core)
+if (DISTRIBUTED_AUDIO_ENABLE_ASAN)
+    target_compile_options(distributed_audio_core PUBLIC -fsanitize=address -fno-omit-frame-pointer)
+    target_link_options(distributed_audio_core PUBLIC -fsanitize=address)
+endif()
+if (DISTRIBUTED_AUDIO_ENABLE_UBSAN)
+    target_compile_options(distributed_audio_core PUBLIC -fsanitize=undefined)
+    target_link_options(distributed_audio_core PUBLIC -fsanitize=undefined)
+endif()
 
 add_executable(distributed_audio_system
     src/main.cpp
@@ -156,3 +168,11 @@ target_link_libraries(distributed_audio_resilience_tests PRIVATE distributed_aud
 enable_project_warnings(distributed_audio_resilience_tests)
 
 add_test(NAME distributed_audio_resilience_tests COMMAND distributed_audio_resilience_tests)
+
+add_executable(distributed_audio_final_integration_tests
+    tests/final_integration_tests.cpp
+)
+target_link_libraries(distributed_audio_final_integration_tests PRIVATE distributed_audio_core)
+enable_project_warnings(distributed_audio_final_integration_tests)
+
+add_test(NAME distributed_audio_final_integration_tests COMMAND distributed_audio_final_integration_tests)

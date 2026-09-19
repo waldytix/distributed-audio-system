@@ -1,20 +1,23 @@
-# Current Architecture
+# System Architecture
 
-Phase 2 defines the in-memory core that future network and audio components can use. It does not perform networking, audio playback, DSP, device discovery, or distributed synchronization.
+The project is a layered C++17 simulation and localhost implementation of a distributed audio system. Physical audio is optional; synthetic and mock paths are the deterministic baseline.
 
 ## Data Flow
 
 ```text
-Producer
-   |
-   v
-AudioFrame
-   |
-   v
-AudioBuffer
-   |
-   v
-Consumer
+Source / capture
+       |
+       v
+AudioFrame -> DSP -> session control
+       |                    |
+       v                    v
+   media UDP          discovery/control UDP
+       |
+       v
+validation -> sequence tracking -> jitter buffer
+       |
+       v
+scheduler -> simulated/mock/optional physical sink
 ```
 
 ## Components
@@ -33,6 +36,19 @@ Consumer
 
 The capacity provides backpressure and prevents an unbounded queue from consuming memory if production temporarily exceeds consumption. This gives future network receivers and playback workers a clear, thread-safe handoff point.
 
-## Future Integration Boundary
+## Layers
 
-Future phases may connect a network receiver or another producer to `AudioBuffer`, and a playback pipeline or another consumer on the other side. Those components are deliberately outside the current implementation so the core data ownership, validation, and synchronization behavior can be tested independently.
+- Data model: `AudioFormat`, `AudioFrame`, bounded `AudioBuffer`.
+- DSP: normalized float conversion, gain, channel conversion, mixing, metering, pipeline.
+- Media plane: explicit PCM16 packet protocol, UDP transport, sequence tracking, jitter, scheduling, resilience.
+- Control plane: discovery, capability matching, session negotiation, lifecycle, liveness.
+- Synchronization: deterministic endpoint clocks, drift/offset estimation, bounded correction.
+- Audio I/O: backend-neutral devices, deterministic mock backend, optional PortAudio feature detection.
+
+## Ownership and Threads
+
+Owning classes use RAII. Sockets own file descriptors; managers own registries; stream endpoints own their jitter/timing state. Current demos use bounded synchronous polling. The architecture leaves clear handoff boundaries for future network, DSP, and audio callback threads. Shutdown is explicit and queues are bounded; the implementation is not hard-real-time safe.
+
+## Control and Media Separation
+
+Discovery and session messages negotiate identity, capabilities, configuration, and lifecycle. Media packets carry PCM payloads and a session envelope. Neither plane serializes native C++ structs, and both validate lengths and identities before use.

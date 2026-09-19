@@ -6,6 +6,7 @@
 #include "distributed_audio/audio_session.hpp"
 #include "distributed_audio/audio_io.hpp"
 #include "distributed_audio/audio_stream.hpp"
+#include "distributed_audio/benchmark.hpp"
 #include "distributed_audio/network_resilience.hpp"
 #include "distributed_audio/jitter_buffer.hpp"
 #include "distributed_audio/network_impairment.hpp"
@@ -41,16 +42,38 @@ int main(int argc, char** argv) {
     bool synthetic_mode = false;
     bool list_devices = false;
     bool resilience_demo = false;
+    bool full_demo = false;
+    bool benchmark_mode = false;
     std::string input_device;
     std::string output_device;
     for (int index = 1; index < argc; ++index) {
         const std::string argument{argv[index]};
         if (argument == "--synthetic") {
             synthetic_mode = true;
+        } else if (argument == "--help") {
+            std::cout << "Distributed Audio System 0.1.0\n"
+                         "  --help                         Show this help\n"
+                         "  --version                      Show version\n"
+                         "  --list-devices                 List available audio devices\n"
+                         "  --synthetic                    Run deterministic synthetic mode\n"
+                         "  --input-device <id>            Validate input device selection\n"
+                         "  --output-device <id>           Validate output device selection\n"
+                         "  --resilience-demo              Run deterministic network resilience mode\n"
+                         "  --full-demo                    Run the complete integration demonstration\n"
+                         "  --benchmark                    Run lightweight performance measurements\n";
+            return 0;
+        } else if (argument == "--version") {
+            std::cout << "Distributed Audio System 0.1.0\n";
+            return 0;
         } else if (argument == "--list-devices") {
             list_devices = true;
         } else if (argument == "--resilience-demo") {
             resilience_demo = true;
+        } else if (argument == "--full-demo") {
+            full_demo = true;
+            resilience_demo = true;
+        } else if (argument == "--benchmark") {
+            benchmark_mode = true;
         } else if ((argument == "--input-device" || argument == "--output-device") && index + 1 < argc) {
             (argument == "--input-device" ? input_device : output_device) = argv[++index];
         } else {
@@ -59,12 +82,17 @@ int main(int argc, char** argv) {
             return 2;
         }
     }
+    if (benchmark_mode) {
+        distributed_audio::benchmark::print(distributed_audio::benchmark::run());
+        return 0;
+    }
     auto audio_backend = distributed_audio::audio_io::create_default_backend();
     const auto backend_result = audio_backend->initialize();
     if (!backend_result) {
         std::cerr << backend_result.message << '\n';
         return 1;
     }
+    if (full_demo) std::cout << "Running complete Phase 1-12 integration demo.\n";
     if (list_devices) {
         for (const auto& device : audio_backend->enumerate()) {
             std::cout << device.id << ": " << device.name

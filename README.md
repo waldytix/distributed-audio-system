@@ -1,6 +1,6 @@
 # Distributed Audio System
 
-Distributed Audio System is a professional C++ project that will evolve into a distributed network audio system. It is written in modern C++17 with a focus on embedded and software engineering fundamentals.
+Distributed Audio System is a C++17 portfolio project exploring a complete distributed-audio architecture on localhost. It combines PCM/DSP processing, explicit UDP protocols, discovery, session control, jitter handling, synchronization, resilience, and hardware-independent testing.
 
 ## Planned Features
 
@@ -14,7 +14,7 @@ Distributed Audio System is a professional C++ project that will evolve into a d
 
 ## Current Status
 
-**Phase 11: Network Reliability, Resilience, and Adaptive Streaming**
+**Phase 12: Final integration and portfolio tooling complete**
 
 Phase 1 established the project structure and build system. Phase 2 added the foundational in-memory audio data model and producer/consumer buffer. Phase 3 added laptop-based PCM conversion and a small DSP layer. Phase 4 added localhost UDP transport for validated PCM16 `AudioFrame` packets. Phase 5 added receiver-side jitter buffering, deterministic packet impairment simulation, monotonic clock estimation, and simulated playback scheduling. Phase 6 added three independent simulated playback endpoints and bounded synchronization control. Phase 7 added explicit device discovery, a thread-safe node registry, liveness tracking, capability compatibility, and real localhost discovery traffic. Phase 8 added control-plane audio-session negotiation and lifecycle management. Phase 9 connects a negotiated session to a genuine localhost PCM media stream and simulated playback pipeline. Phase 10 adds backend-neutral audio device interfaces, deterministic mock capture/output, bounded callback handoff buffers, and optional PortAudio detection. Phase 11 adds snapshot statistics, bounded adaptive jitter policy, deterministic loss/jitter simulation, liveness monitoring, and bounded recovery state. Physical playback, authentication, encryption, and production-grade distributed synchronization remain future work.
 
@@ -129,6 +129,32 @@ Use `./build/distributed_audio_system --list-devices` to enumerate the active ba
 
 Use `./build/distributed_audio_system --resilience-demo` to run the deterministic loss, burst-loss, duplicate, reorder, concealment, and bounded-buffer scenario.
 
+## Quick Start
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+./build/distributed_audio_system --full-demo
+./build/distributed_audio_system --benchmark
+```
+
+Run `./build/distributed_audio_system --help` for all modes, including `--version`, `--list-devices`, and device selection.
+
+## Architecture
+
+```text
+source/capture -> AudioFrame -> DSP -> session/media UDP
+									  |
+receiver -> validation -> sequence -> jitter -> scheduler -> sink
+```
+
+Discovery and session negotiation form the control plane. PCM frames, UDP transport, sequencing, jitter handling, scheduling, and resilience form the media plane. See [docs/architecture.md](docs/architecture.md).
+
+## Technology
+
+C++17, CMake, POSIX UDP sockets, RAII, mutexes and condition variables, explicit binary protocols, PCM/DSP, bounded buffering, deterministic clocks, fault injection, mock audio I/O, CTest, and GitHub Actions CI.
+
 ## Testing
 
 The project uses small internal test executables built from standard C++17 facilities. CTest covers Phase 2 buffer behavior, Phase 3 DSP behavior, Phase 4 packet/UDP behavior, Phase 5 jitter, clock, scheduler, impairment, concealment, and simulated playback behavior, Phase 6 multi-endpoint convergence, Phase 7 discovery, registry, liveness, compatibility, and localhost service behavior, Phase 8 control serialization, negotiation, lifecycle, rejection, timeout, multiple sessions, and localhost exchange, Phase 9 media streaming, Phase 10 mock audio I/O, and Phase 11 resilience accounting, adaptive limits, liveness recovery, loss, and stress behavior.
@@ -142,4 +168,30 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-A Release build can be configured with `-DCMAKE_BUILD_TYPE=Release`. No external libraries are required.
+A Release build can be configured with `-DCMAKE_BUILD_TYPE=Release`. PortAudio is optional and was unavailable in the verified WSL environment.
+
+## Repository Structure
+
+- `include/distributed_audio/`: public C++ interfaces.
+- `src/`: core implementation and demo.
+- `tests/`: focused phase and integration tests.
+- `docs/`: architecture, protocol, testing, performance, demo, and interview notes.
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Testing](docs/testing.md)
+- [Performance](docs/performance.md)
+- [Demo commands](docs/demo.md)
+- [End-to-end streaming](docs/end_to_end_streaming.md)
+- [Reliability](docs/reliability.md)
+- [Project summary](docs/project_summary.md)
+- [Interview notes](docs/interview_notes.md)
+
+## Limitations
+
+This project does not claim production readiness, hard-real-time safety, guaranteed lossless UDP delivery, sample-accurate physical synchronization, authentication, encryption, adaptive bitrate, or physical audio testing. Queues and packet inputs are bounded, but standard containers, allocations, mutexes, and synchronous operations remain.
+
+## Future Improvements
+
+Potential next steps include complete PortAudio streams, callback-safe lock-free handoff, authenticated/encrypted control traffic, short-window recovery/FEC, adaptive bitrate, stronger reconnect handshakes, and hardware-clock/resampling work.
