@@ -13,6 +13,12 @@ struct SimulatedPlaybackStatistics {
     std::uint64_t late_frames{0};
     std::uint64_t underruns{0};
     std::uint64_t total_frames_processed{0};
+    std::uint64_t samples_played{0};
+    std::uint64_t first_sequence{0};
+    std::uint64_t last_sequence{0};
+    float peak_level{0.0F};
+    std::uint64_t payload_checksum{0};
+    bool has_sequence{false};
     std::vector<std::uint64_t> playback_sequence;
 };
 

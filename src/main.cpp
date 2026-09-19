@@ -3,6 +3,8 @@
 #include "distributed_audio/clock_estimator.hpp"
 #include "distributed_audio/dsp_pipeline.hpp"
 #include "distributed_audio/device_discovery.hpp"
+#include "distributed_audio/audio_session.hpp"
+#include "distributed_audio/audio_stream.hpp"
 #include "distributed_audio/jitter_buffer.hpp"
 #include "distributed_audio/network_impairment.hpp"
 #include "distributed_audio/multi_device_sync.hpp"
@@ -355,6 +357,132 @@ int main() {
     studio.shutdown();
     desktop.shutdown();
     late_device.shutdown();
+
+    distributed_audio::session::AudioSessionManager session_initiator{
+        living_room.local_info(), 500ms};
+    distributed_audio::session::AudioSessionManager session_receiver{
+        studio.local_info(), 500ms};
+    distributed_audio::session::SessionControlService control_initiator{
+        session_initiator, 0, 10ms};
+    distributed_audio::session::SessionControlService control_receiver{
+        session_receiver, 0, 10ms};
+    const auto session_offer = session_initiator.create_offer(
+        studio.local_info(), discovery_now);
+    if (!session_offer.has_value()) {
+        std::cerr << "Session offer creation failed.\n";
+        return 1;
+    }
+    const auto offer_sent = control_initiator.send(
+        *session_offer, "127.0.0.1", control_receiver.port());
+    const auto receiver_poll = control_receiver.poll(discovery_now);
+    const auto initiator_poll = control_initiator.poll(discovery_now);
+    (void)offer_sent;
+    (void)receiver_poll;
+    (void)initiator_poll;
+    const auto established = session_initiator.lookup(session_offer->session_id);
+    std::cout << "\nAudio session negotiation demo\n"
+              << "Session offer: " << (session_offer.has_value() ? "sent" : "not created") << '\n'
+              << "Negotiated format: " << session_offer->configuration->format.sample_rate
+              << " Hz / " << session_offer->configuration->format.channel_count
+              << " channels / " << session_offer->configuration->format.bits_per_sample
+              << " bit\n"
+              << "Session ID: " << session_offer->session_id.to_string() << '\n'
+              << "State: " << (established.has_value() &&
+                                  established->state == distributed_audio::session::AudioSessionState::established
+                                      ? "Established" : "Failed") << '\n';
+
+    const auto start_message = session_initiator.start(session_offer->session_id, discovery_now + 1ms);
+    if (!start_message.has_value()) {
+        std::cerr << "Session start creation failed.\n";
+        return 1;
+    }
+    const auto start_sent = control_initiator.send(
+        *start_message, "127.0.0.1", control_receiver.port());
+    const auto start_receiver_poll = control_receiver.poll(discovery_now + 1ms);
+    const auto start_initiator_poll = control_initiator.poll(discovery_now + 1ms);
+    (void)start_sent;
+    (void)start_receiver_poll;
+    (void)start_initiator_poll;
+    const auto streaming = session_initiator.lookup(session_offer->session_id);
+    std::cout << "Starting session: "
+              << (streaming.has_value() && streaming->state == distributed_audio::session::AudioSessionState::streaming
+                      ? "Streaming" : "not streaming") << '\n'
+              << "Audio transport associated with negotiated session.\n";
+
+    distributed_audio::stream::AudioStreamReceiver media_receiver{
+        session_offer->session_id, *session_offer->configuration,
+        session_offer->configuration->receiver_audio_port, 1ms};
+    distributed_audio::stream::AudioStreamSender media_sender{
+        session_offer->session_id, *session_offer->configuration, "127.0.0.1"};
+    if (!media_receiver.prepare() || !media_receiver.start() ||
+        !media_sender.prepare() || !media_sender.start()) {
+        std::cerr << "Media stream startup failed.\n";
+        return 1;
+    }
+    distributed_audio::stream::SyntheticAudioSource media_source{
+        *session_offer->configuration, 440.0F, 0.5F, 0.5F};
+    constexpr int media_frame_count = 20;
+    for (int index = 0; index < media_frame_count; ++index) {
+        const auto generated = media_source.next();
+        const auto sent = media_sender.send(generated.frame);
+        if (!sent) {
+            std::cerr << "Media UDP transmission failed.\n";
+            return 1;
+        }
+        const auto media_now = ClockTimePoint{std::chrono::nanoseconds{
+            static_cast<std::int64_t>(index) * 5'000'000}};
+        const auto received_now = media_receiver.poll(media_now);
+        const auto played_now = media_receiver.playback_step(media_now);
+        (void)received_now;
+        (void)played_now;
+    }
+    const auto received_media = media_receiver.statistics().datagrams_received;
+    const auto& media_sender_stats = media_sender.statistics();
+    const auto& media_receiver_stats = media_receiver.statistics();
+    std::cout << "Streaming over UDP 127.0.0.1:"
+              << session_offer->configuration->receiver_audio_port << '\n'
+              << "Frames generated: " << media_source.generated() << '\n'
+              << "Frames transmitted: " << media_sender_stats.frames_transmitted << '\n'
+              << "Frames received: " << received_media << '\n'
+              << "Frames accepted: " << media_receiver_stats.frames_accepted << '\n'
+              << "Frames played: " << media_receiver_stats.frames_played << '\n'
+              << "Samples played: " << media_receiver_stats.samples_played << '\n'
+              << "Concealed frames: " << media_receiver_stats.concealed_frames << '\n'
+              << "Peak level: " << media_receiver_stats.peak_level << '\n';
+    const auto media_stopped = media_sender.stop() && media_receiver.stop();
+    std::cout << "Stream state: " << (media_stopped ? "Stopped" : "Failed") << '\n';
+
+    const auto stop_message = session_initiator.stop(session_offer->session_id, discovery_now + 2ms);
+    if (!stop_message.has_value()) {
+        std::cerr << "Session stop creation failed.\n";
+        return 1;
+    }
+    const auto stop_sent = control_initiator.send(
+        *stop_message, "127.0.0.1", control_receiver.port());
+    const auto stop_receiver_poll = control_receiver.poll(discovery_now + 2ms);
+    const auto stop_initiator_poll = control_initiator.poll(discovery_now + 2ms);
+    (void)stop_sent;
+    (void)stop_receiver_poll;
+    (void)stop_initiator_poll;
+    const auto closed = session_initiator.lookup(session_offer->session_id);
+    std::cout << "Stopping session: "
+              << (closed.has_value() && closed->state == distributed_audio::session::AudioSessionState::closed
+                      ? "Closed" : "not closed") << '\n';
+
+    auto incompatible_config = *session_offer->configuration;
+    incompatible_config.format.sample_rate = 96'000;
+    const auto rejection = session_receiver.handle(
+        {distributed_audio::session::SessionMessageType::offer,
+         distributed_audio::session::SessionId::from_u64(900),
+         living_room.local_info().id, studio.local_info().id,
+         incompatible_config, distributed_audio::session::SessionRejectReason::none},
+        discovery_now + 3ms);
+    std::cout << "Rejected-session demonstration: "
+              << (rejection.has_value() && rejection->reason ==
+                          distributed_audio::session::SessionRejectReason::incompatible_format
+                      ? "incompatible audio configuration" : "not rejected") << '\n';
+    control_initiator.shutdown();
+    control_receiver.shutdown();
 
     return 0;
 }

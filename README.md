@@ -14,9 +14,9 @@ Distributed Audio System is a professional C++ project that will evolve into a d
 
 ## Current Status
 
-**Phase 7: Device Discovery and Node Management**
+**Phase 9: End-to-End Session-Driven Audio Streaming**
 
-Phase 1 established the project structure and build system. Phase 2 added the foundational in-memory audio data model and producer/consumer buffer. Phase 3 added laptop-based PCM conversion and a small DSP layer. Phase 4 added localhost UDP transport for validated PCM16 `AudioFrame` packets. Phase 5 added receiver-side jitter buffering, deterministic packet impairment simulation, monotonic clock estimation, and simulated playback scheduling. Phase 6 added three independent simulated playback endpoints and bounded synchronization control. Phase 7 adds explicit device discovery, a thread-safe node registry, liveness tracking, capability compatibility, and real localhost discovery traffic. Physical playback, authentication, encryption, session management, and production-grade distributed synchronization remain future work.
+Phase 1 established the project structure and build system. Phase 2 added the foundational in-memory audio data model and producer/consumer buffer. Phase 3 added laptop-based PCM conversion and a small DSP layer. Phase 4 added localhost UDP transport for validated PCM16 `AudioFrame` packets. Phase 5 added receiver-side jitter buffering, deterministic packet impairment simulation, monotonic clock estimation, and simulated playback scheduling. Phase 6 added three independent simulated playback endpoints and bounded synchronization control. Phase 7 added explicit device discovery, a thread-safe node registry, liveness tracking, capability compatibility, and real localhost discovery traffic. Phase 8 added control-plane audio-session negotiation and lifecycle management. Phase 9 connects a negotiated session to a genuine localhost PCM media stream and simulated playback pipeline. Physical playback, authentication, encryption, and production-grade distributed synchronization remain future work.
 
 ## Phase 2 Architecture
 
@@ -92,9 +92,33 @@ The demo reports measured initial/final skew, endpoint errors, corrections, stat
 
 See [docs/device_discovery.md](docs/device_discovery.md) for the protocol and registry model.
 
+## Phase 8 Audio Sessions
+
+- Stable `SessionId` and validated `AudioSessionConfig`
+- Deterministic capability-based configuration selection
+- Explicit Idle, Negotiating, Established, Streaming, Stopping, Closed, and Failed states
+- Binary OFFER, ACCEPT, REJECT, START, STOP, and ACK control messages
+- Separate localhost UDP control sockets, leaving Phase 4 media transport unchanged
+- Thread-safe multi-session registry with negotiation timeout and device-unavailable handling
+- Idempotent duplicate offer/start/stop handling where appropriate
+
+The demo negotiates a real session between two previously discovered devices, starts and stops the logical stream, associates the negotiated configuration with the existing audio transport, and exercises an incompatible-format rejection. See [docs/session_management.md](docs/session_management.md) for the state machine and control protocol.
+
+## Phase 9 End-to-End Streaming
+
+- Deterministic sine-wave source using the negotiated format and frame duration
+- Existing DSP gain and peak metering before transmission
+- SessionId envelope around the existing Phase 4 media packet format
+- Real localhost UDP media sender and receiver
+- Session/configuration validation at the media boundary
+- Existing SequenceTracker, JitterBuffer, PlaybackScheduler, and SimulatedPlayback integration
+- Structured stream statistics, PCM consumption metrics, and deterministic shutdown
+
+The demo sends real session-associated PCM16 frames from the negotiated sender to the receiver, then reports transmitted, received, accepted, played, concealed, and peak-level measurements.
+
 ## Testing
 
-The project uses small internal test executables built from standard C++17 facilities. CTest covers Phase 2 buffer behavior, Phase 3 DSP behavior, Phase 4 packet/UDP behavior, Phase 5 jitter, clock, scheduler, impairment, concealment, and simulated playback behavior, Phase 6 multi-endpoint convergence, and Phase 7 discovery, registry, liveness, compatibility, and localhost service behavior.
+The project uses small internal test executables built from standard C++17 facilities. CTest covers Phase 2 buffer behavior, Phase 3 DSP behavior, Phase 4 packet/UDP behavior, Phase 5 jitter, clock, scheduler, impairment, concealment, and simulated playback behavior, Phase 6 multi-endpoint convergence, Phase 7 discovery, registry, liveness, compatibility, and localhost service behavior, and Phase 8 control serialization, negotiation, lifecycle, rejection, timeout, multiple sessions, and localhost exchange.
 
 ## Build and Run
 
