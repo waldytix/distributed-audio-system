@@ -1,6 +1,6 @@
 # Distributed Audio System
 
-Distributed Audio System is a professional C++ project that will evolve into a distributed network audio system. It is written in modern C++ with a focus on embedded and software engineering fundamentals.
+Distributed Audio System is a professional C++ project that will evolve into a distributed network audio system. It is written in modern C++17 with a focus on embedded and software engineering fundamentals.
 
 ## Planned Features
 
@@ -14,9 +14,63 @@ Distributed Audio System is a professional C++ project that will evolve into a d
 
 ## Current Status
 
-**Phase 1: Foundation**
+**Phase 5: Jitter Buffer, Clock Estimation, and Playback Scheduling**
 
-The current phase establishes the project structure, CMake build system, C++17 configuration, compiler warnings, and a minimal command-line application. Networking, audio playback, DSP, and distributed synchronization are intentionally not implemented yet.
+Phase 1 established the project structure and build system. Phase 2 added the foundational in-memory audio data model and producer/consumer buffer. Phase 3 added laptop-based PCM conversion and a small DSP layer. Phase 4 added localhost UDP transport for validated PCM16 `AudioFrame` packets. Phase 5 adds receiver-side jitter buffering, deterministic packet impairment simulation, monotonic clock estimation, and simulated playback scheduling. Physical playback and production-grade distributed synchronization remain deferred.
+
+## Phase 2 Architecture
+
+### AudioFormat
+
+`AudioFormat` describes PCM data using a sample rate, channel count, and bits per sample. It validates basic format constraints without limiting the project to one sample rate or channel layout.
+
+### AudioFrame
+
+`AudioFrame` owns one block of interleaved PCM payload bytes together with its format, monotonically increasing sequence number, and `std::chrono` presentation timestamp. Construction rejects payloads that do not contain complete sample frames.
+
+### AudioBuffer
+
+`AudioBuffer` is a bounded, thread-safe FIFO of `AudioFrame` objects. It uses mutexes and condition variables to coordinate producers and consumers, applies backpressure when full, and supports clean shutdown through `close()` while allowing queued frames to drain.
+
+See [docs/architecture.md](docs/architecture.md) for the current data flow and design rationale.
+
+## Phase 3 DSP Capabilities
+
+- Signed little-endian 16-bit PCM to normalized floating-point conversion and back
+- Linear and decibel gain with bypass support
+- Hard saturation to the normalized range `[-1.0, 1.0]`
+- Mono-to-stereo duplication and stereo-to-mono averaging
+- Deterministic compatible-stream mixing
+- Per-channel and overall absolute peak metering
+- A small pipeline that performs PCM conversion, channel conversion, gain, and metering
+
+The demo generates a short in-memory 440 Hz stereo sine wave, sends it through the bounded buffer, processes it as mono at -6 dB, and prints the measured peak. It does not require audio hardware.
+
+## Phase 4 Network Transport
+
+- Explicit 40-byte big-endian packet header and PCM16 payload serialization
+- Checked packet parsing with centralized size and format limits
+- RAII POSIX UDP sender and receiver for configurable IPv4 endpoints
+- Sequence tracking for duplicates, gaps, out-of-order packets, and wraparound
+- Deterministic malformed-packet and localhost loopback tests
+
+The demo also sends ten real 5 ms stereo PCM16 frames over `127.0.0.1` and reports runtime receive statistics. See [docs/network_protocol.md](docs/network_protocol.md) for the exact wire format and transport limitations.
+
+## Phase 5 Receiver Timing
+
+- Bounded reorder buffer with configurable prebuffering and missing-frame deadlines
+- Modular sequence handling across `uint64_t` rollover
+- Duplicate, late, incompatible, and overflow rejection statistics
+- Silence concealment by default, with repeat-previous support
+- Monotonic-clock jitter estimation and linear remote/local clock regression
+- Configurable playout delay and deterministic playback decisions
+- Deterministic impairment simulation and simulated playback sink
+
+The demo retains the real UDP loopback exchange and adds a separate deterministic timing scenario with reordering, duplication, and one lost frame. See [docs/synchronization.md](docs/synchronization.md) for the receiver timing model and its limitations.
+
+## Testing
+
+The project uses small internal test executables built from standard C++17 facilities. CTest covers Phase 2 buffer behavior, Phase 3 DSP behavior, Phase 4 packet/UDP behavior, and Phase 5 jitter, clock, scheduler, impairment, concealment, and simulated playback behavior.
 
 ## Build and Run
 
@@ -24,6 +78,7 @@ The current phase establishes the project structure, CMake build system, C++17 c
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build
 ./build/distributed_audio_system
+ctest --test-dir build --output-on-failure
 ```
 
-A Release build can be configured with `-DCMAKE_BUILD_TYPE=Release`.
+A Release build can be configured with `-DCMAKE_BUILD_TYPE=Release`. No external libraries are required.
