@@ -2,6 +2,7 @@
 #include "distributed_audio/audio_frame.hpp"
 #include "distributed_audio/clock_estimator.hpp"
 #include "distributed_audio/dsp_pipeline.hpp"
+#include "distributed_audio/device_discovery.hpp"
 #include "distributed_audio/jitter_buffer.hpp"
 #include "distributed_audio/network_impairment.hpp"
 #include "distributed_audio/multi_device_sync.hpp"
@@ -273,6 +274,87 @@ int main() {
                   << static_cast<int>(metrics.state) << ", concealed "
                   << metrics.concealed_frames << '\n';
     }
+
+    auto make_device = [](std::uint64_t id, const std::string& name,
+                          std::uint16_t audio_port) {
+        distributed_audio::discovery::DeviceInfo info;
+        info.id = distributed_audio::discovery::DeviceId::from_u64(id);
+        info.name = name;
+        info.sample_rates = {48'000};
+        info.channel_counts = {2};
+        info.bits_per_sample = {16};
+        info.audio_port = audio_port;
+        return info;
+    };
+    using distributed_audio::discovery::DiscoveryService;
+    using distributed_audio::discovery::MessageType;
+    DiscoveryService living_room{make_device(101, "Living Room Speaker", 5101), 0, 10ms, 200ms};
+    DiscoveryService studio{make_device(102, "Studio Speaker", 5102), 0, 10ms, 200ms};
+    DiscoveryService desktop{make_device(103, "Desktop Receiver", 5103), 0, 10ms, 200ms};
+    const auto discovery_now = ClockTimePoint{};
+    const auto sent_ab = living_room.send(MessageType::announce, "127.0.0.1", studio.port());
+    const auto sent_ac = living_room.send(MessageType::announce, "127.0.0.1", desktop.port());
+    const auto sent_ba = studio.send(MessageType::announce, "127.0.0.1", living_room.port());
+    const auto sent_bc = studio.send(MessageType::announce, "127.0.0.1", desktop.port());
+    const auto sent_ca = desktop.send(MessageType::announce, "127.0.0.1", living_room.port());
+    const auto sent_cb = desktop.send(MessageType::announce, "127.0.0.1", studio.port());
+    (void)sent_ab;
+    (void)sent_ac;
+    (void)sent_ba;
+    (void)sent_bc;
+    (void)sent_ca;
+    (void)sent_cb;
+    const auto discovery_poll_a = living_room.poll(discovery_now);
+    const auto discovery_poll_b = studio.poll(discovery_now);
+    const auto discovery_poll_c = desktop.poll(discovery_now);
+    (void)discovery_poll_a;
+    (void)discovery_poll_b;
+    (void)discovery_poll_c;
+    std::cout << "\nDevice discovery demo\n"
+              << "Known devices at Living Room: " << living_room.registry().size() << '\n'
+              << "Known devices at Studio: " << studio.registry().size() << '\n'
+              << "Known devices at Desktop: " << desktop.registry().size() << '\n';
+    const auto compatibility = distributed_audio::discovery::check_compatibility(
+        living_room.local_info(), studio.local_info());
+    std::cout << "Living Room Speaker <-> Studio Speaker: "
+              << (compatibility.compatible ? "compatible" : "incompatible") << '\n';
+
+    DiscoveryService late_device{make_device(104, "Late Joiner", 5104), 0, 10ms, 200ms};
+    const auto sent_late = late_device.send(MessageType::announce, "127.0.0.1", living_room.port());
+    (void)sent_late;
+    const auto late_poll = living_room.poll(discovery_now + 1ms);
+    (void)late_poll;
+    std::cout << "Late device join: "
+              << (living_room.registry().lookup(late_device.local_info().id).has_value()
+                      ? "detected" : "not detected") << '\n';
+
+    auto updated_studio = studio.local_info();
+    updated_studio.name = "Studio Speaker Updated";
+    studio.update_local_info(updated_studio);
+    const auto sent_update = studio.send(MessageType::announce, "127.0.0.1", living_room.port());
+    (void)sent_update;
+    const auto update_poll = living_room.poll(discovery_now + 2ms);
+    (void)update_poll;
+    const auto updated_entry = living_room.registry().lookup(studio.local_info().id);
+    std::cout << "Device update: "
+              << (updated_entry.has_value() && updated_entry->info.name == updated_studio.name
+                      ? "detected without duplicate registry entry" : "not detected") << '\n';
+
+    const auto sent_goodbye = desktop.send(MessageType::goodbye, "127.0.0.1", living_room.port());
+    (void)sent_goodbye;
+    const auto goodbye_poll = living_room.poll(discovery_now + 3ms);
+    (void)goodbye_poll;
+    std::cout << "Graceful departure: "
+              << (!living_room.registry().lookup(desktop.local_info().id).has_value()
+                      ? "detected" : "not detected") << '\n';
+    const auto stale_count = living_room.registry().expire(discovery_now + 201ms);
+    std::cout << "Stale device expiration: " << (stale_count > 0 ? "detected" : "not detected")
+              << '\n';
+
+    living_room.shutdown();
+    studio.shutdown();
+    desktop.shutdown();
+    late_device.shutdown();
 
     return 0;
 }

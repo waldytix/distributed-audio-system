@@ -39,6 +39,7 @@ add_library(distributed_audio_core
     src/simulated_playback.cpp
     src/network_impairment.cpp
     src/multi_device_sync.cpp
+    src/device_discovery.cpp
 )
 
 target_compile_features(distributed_audio_core PUBLIC cxx_std_17)
@@ -95,3 +96,11 @@ target_link_libraries(distributed_audio_multi_device_tests PRIVATE distributed_a
 enable_project_warnings(distributed_audio_multi_device_tests)
 
 add_test(NAME distributed_audio_multi_device_tests COMMAND distributed_audio_multi_device_tests)
+
+add_executable(distributed_audio_discovery_tests
+    tests/discovery_tests.cpp
+)
+target_link_libraries(distributed_audio_discovery_tests PRIVATE distributed_audio_core)
+enable_project_warnings(distributed_audio_discovery_tests)
+
+add_test(NAME distributed_audio_discovery_tests COMMAND distributed_audio_discovery_tests)

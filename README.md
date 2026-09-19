@@ -14,9 +14,9 @@ Distributed Audio System is a professional C++ project that will evolve into a d
 
 ## Current Status
 
-**Phase 6: Multi-Device Playback Synchronization**
+**Phase 7: Device Discovery and Node Management**
 
-Phase 1 established the project structure and build system. Phase 2 added the foundational in-memory audio data model and producer/consumer buffer. Phase 3 added laptop-based PCM conversion and a small DSP layer. Phase 4 added localhost UDP transport for validated PCM16 `AudioFrame` packets. Phase 5 added receiver-side jitter buffering, deterministic packet impairment simulation, monotonic clock estimation, and simulated playback scheduling. Phase 6 adds three independent simulated playback endpoints and bounded synchronization control. Physical playback and production-grade distributed synchronization remain deferred.
+Phase 1 established the project structure and build system. Phase 2 added the foundational in-memory audio data model and producer/consumer buffer. Phase 3 added laptop-based PCM conversion and a small DSP layer. Phase 4 added localhost UDP transport for validated PCM16 `AudioFrame` packets. Phase 5 added receiver-side jitter buffering, deterministic packet impairment simulation, monotonic clock estimation, and simulated playback scheduling. Phase 6 added three independent simulated playback endpoints and bounded synchronization control. Phase 7 adds explicit device discovery, a thread-safe node registry, liveness tracking, capability compatibility, and real localhost discovery traffic. Physical playback, authentication, encryption, session management, and production-grade distributed synchronization remain future work.
 
 ## Phase 2 Architecture
 
@@ -80,9 +80,21 @@ The demo retains the real UDP loopback exchange and adds a separate deterministi
 
 The demo reports measured initial/final skew, endpoint errors, corrections, states, drift, and concealment. It demonstrates gradual convergence in simulation; it does not claim sample-accurate synchronization or production-grade distributed clock discipline.
 
+## Phase 7 Device Discovery
+
+- Stable 128-bit `DeviceId` values with text conversion and ordering
+- `DeviceInfo` capability and port advertisements
+- Explicit binary ANNOUNCE, QUERY, RESPONSE, and GOODBYE messages
+- Big-endian header and capability fields with bounded validation
+- Thread-safe registry updates, lookup, removal, and deterministic stale expiration
+- Sample-rate, channel-count, and PCM-width compatibility results
+- Real localhost discovery among three services, including join, update, goodbye, and expiration
+
+See [docs/device_discovery.md](docs/device_discovery.md) for the protocol and registry model.
+
 ## Testing
 
-The project uses small internal test executables built from standard C++17 facilities. CTest covers Phase 2 buffer behavior, Phase 3 DSP behavior, Phase 4 packet/UDP behavior, Phase 5 jitter, clock, scheduler, impairment, concealment, and simulated playback behavior, and Phase 6 multi-endpoint convergence and bounded corrections.
+The project uses small internal test executables built from standard C++17 facilities. CTest covers Phase 2 buffer behavior, Phase 3 DSP behavior, Phase 4 packet/UDP behavior, Phase 5 jitter, clock, scheduler, impairment, concealment, and simulated playback behavior, Phase 6 multi-endpoint convergence, and Phase 7 discovery, registry, liveness, compatibility, and localhost service behavior.
 
 ## Build and Run
 
